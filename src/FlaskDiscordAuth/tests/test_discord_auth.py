@@ -1,5 +1,5 @@
 from flask import Flask, redirect, url_for, session, request
-from FlaskDiscordAuth.discord_auth import DiscordAuth
+from src.FlaskDiscordAuth.discord_auth import DiscordAuth
 
 # Создаем Flask приложение
 app = Flask(__name__)
