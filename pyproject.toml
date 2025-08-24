@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "FlaskDiscordAuth"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Python library to simplify Discord OAuth2 authentication with Flask applications"
 readme = "README.md"
 license = "MIT"

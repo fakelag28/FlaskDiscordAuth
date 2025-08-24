@@ -1,147 +1,8 @@
 # FlaskDiscordAuth
 
-*Read this in [English](#english-documentation) | Читайте на [русском](#русская-документация)*
-
----
-
-## English Documentation
-
-### Overview
-
-FlaskDiscordAuth is a Python library designed to simplify Discord OAuth2 authentication integration with Flask applications. It provides an easy way to authenticate users via Discord, obtain their basic information, and protect routes that require authentication.
-
-### Installation
-
-```bash
-pip install FlaskDiscordAuth
-```
-
-### Requirements
-
-- Flask
-- requests
-
-### Basic Usage
-
-Here's a simple example of how to use FlaskDiscordAuth:
-
-```python
-from flask import Flask, redirect, url_for, session, request
-from FlaskDiscordAuth.discord_auth import DiscordAuth
-
-app = Flask(__name__)
-app.secret_key = 'your_secret_key'
-
-# Discord configuration settings
-CLIENT_ID = 'your_client_id'
-CLIENT_SECRET = 'your_client_secret' 
-REDIRECT_URI = 'http://127.0.0.1:5000/callback'
-
-# Initialize Discord authentication object
-discord_auth = DiscordAuth(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI)
-
-@app.route('/')
-def home():
-    if 'user' in session:
-        user = session['user']
-        return f"Hello, {user['username']}!"
-    return 'Welcome! <a href="/login">Login with Discord</a>'
-
-@app.route('/login')
-def login():
-    return redirect(discord_auth.get_login_url())
-
-@app.route('/callback')
-def callback():
-    code = request.args.get('code')
-    token_data = discord_auth.get_token(code)
-    access_token = token_data['access_token']
-    user_info = discord_auth.get_user_info(access_token)
-    session['user'] = user_info
-    return redirect(url_for('home'))
-
-if __name__ == '__main__':
-    app.run(debug=True)
-```
-
-### Protecting Routes
-
-You can use the provided decorator to protect routes that require authentication:
-
-```python
-@app.route('/profile')
-@discord_auth.login_required
-def profile():
-    user = session['user']
-    return f"Profile of {user['username']}"
-```
-
-### API Reference
-
-#### DiscordAuth
-
-```python
-DiscordAuth(client_id, client_secret, redirect_uri, scope='identify email')
-```
-
-Creates a new Discord authentication instance.
-
-Parameters:
-- `client_id` (str): Your Discord application client ID
-- `client_secret` (str): Your Discord application client secret
-- `redirect_uri` (str): The URI Discord will redirect to after authentication
-- `scope` (str, optional): Space-separated list of OAuth2 scopes. Default is 'identify email'
-
-#### Methods
-
-##### get_login_url()
-
-Generates the OAuth2 authorization URL for Discord.
-
-Returns:
-- `str`: The complete Discord authorization URL
-
-##### get_token(code)
-
-Exchanges an authorization code for an access token.
-
-Parameters:
-- `code` (str): The authorization code received from Discord
-
-Returns:
-- `dict`: Token data including access_token, token_type, expires_in, etc.
-
-##### get_user_info(access_token)
-
-Retrieves Discord user information using the provided access token.
-
-Parameters:
-- `access_token` (str): The Discord access token
-
-Returns:
-- `dict`: User information including id, username, avatar, email, etc.
-
-##### login_required(func)
-
-A decorator to protect routes that require Discord authentication.
-
-Parameters:
-- `func`: The route function to protect
-
-Returns:
-- `function`: A wrapper function that checks if the user is authenticated
-
-### Complete Example
-
-For a complete example, see the `app_example.py` file included with the library.
-
----
-
-## Русская документация
-
 ### Обзор
 
-FlaskDiscordAuth - это Python-библиотека, разработанная для упрощения интеграции аутентификации Discord OAuth2 с приложениями Flask. Она предоставляет простой способ аутентификации пользователей через Discord, получения их основной информации и защиты маршрутов, требующих аутентификации.
+FlaskDiscordAuth - это Python-библиотека, разработанная для упрощения интеграции аутентификации Discord OAuth2 с приложениями Flask. Она предоставляет простой способ аутентификации пользователей через Discord, получения их основной информации, управления серверами и защиты маршрутов, требующих аутентификации.
 
 ### Установка
 
@@ -167,7 +28,7 @@ app.secret_key = 'your_secret_key'
 
 # Настройки Discord
 CLIENT_ID = 'your_client_id'
-CLIENT_SECRET = 'your_client_secret' 
+CLIENT_SECRET = 'your_client_secret'
 REDIRECT_URI = 'http://127.0.0.1:5000/callback'
 
 # Инициализируем объект аутентификации Discord
@@ -188,9 +49,19 @@ def login():
 def callback():
     code = request.args.get('code')
     token_data = discord_auth.get_token(code)
-    access_token = token_data['access_token']
-    user_info = discord_auth.get_user_info(access_token)
+    session['access_token'] = token_data['access_token']
+    session['refresh_token'] = token_data.get('refresh_token')
+    session['scope'] = token_data.get('scope', '')
+    user_info = discord_auth.get_user_info(session['access_token'])
     session['user'] = user_info
+    return redirect(url_for('home'))
+
+@app.route('/logout')
+def logout():
+    access_token = session.get('access_token')
+    if access_token:
+        discord_auth.revoke_token(access_token)
+    session.clear()
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
@@ -199,7 +70,7 @@ if __name__ == '__main__':
 
 ### Защита маршрутов
 
-Вы можете использовать предоставленный декоратор для защиты маршрутов, требующих аутентификации:
+Вы можете использовать предоставленные декораторы для защиты маршрутов:
 
 ```python
 @app.route('/profile')
@@ -207,63 +78,63 @@ if __name__ == '__main__':
 def profile():
     user = session['user']
     return f"Профиль пользователя {user['username']}"
+
+@app.route('/moderator')
+@discord_auth.guilds_required('1234567890', '0987654321')
+def moderator_panel():
+    return "Панель модератора"
 ```
 
-### Справочник по API
+### Расширенные возможности
 
-#### DiscordAuth
+#### Получение серверов пользователя
 
 ```python
-DiscordAuth(client_id, client_secret, redirect_uri, scope='identify email')
+@app.route('/guilds')
+@discord_auth.login_required
+def user_guilds():
+    access_token = session.get('access_token')
+    guilds = discord_auth.get_user_guilds(access_token)
+    return f"Вы состоите в {len(guilds)} серверах"
 ```
 
-Создает новый экземпляр аутентификации Discord.
+#### Динамические scopes
 
-Параметры:
-- `client_id` (str): ID клиента вашего приложения Discord
-- `client_secret` (str): Секретный ключ вашего приложения Discord
-- `redirect_uri` (str): URI, на который Discord перенаправит после аутентификации
-- `scope` (str, опционально): Список областей OAuth2, разделенных пробелами. По умолчанию 'identify email'
+```python
+@app.route('/login_with_guilds')
+def login_with_guilds():
+    return redirect(discord_auth.get_login_url(scope='identify email guilds'))
+```
 
-#### Методы
+#### Обновление токена
 
-##### get_login_url()
+```python
+refresh_token = session.get('refresh_token')
+if refresh_token:
+    new_tokens = discord_auth.refresh_token(refresh_token)
+    session['access_token'] = new_tokens['access_token']
+    session['refresh_token'] = new_tokens['refresh_token']
+```
 
-Генерирует URL авторизации OAuth2 для Discord.
+#### Получение баннера и аватара пользователя
 
-Возвращает:
-- `str`: Полный URL для авторизации Discord
+Библиотека теперь поддерживает получение дополнительной информации о пользователе, включая баннер:
 
-##### get_token(code)
+```python
+user_info = discord_auth.get_user_info(access_token)
+banner_url = f"https://cdn.discordapp.com/banners/{user_info['id']}/{user_info['banner']}.png" if user_info.get('banner') else None
+avatar_url = f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png" if user_info.get('avatar') else None
+```
 
-Обменивает код авторизации на токен доступа.
+#### Сохранение scope
 
-Параметры:
-- `code` (str): Код авторизации, полученный от Discord
+Библиотека автоматически сохраняет scope в сессии, что позволяет проверять доступные разрешения:
 
-Возвращает:
-- `dict`: Данные токена, включая access_token, token_type, expires_in и т.д.
+```python
+# Проверка наличия scope guilds
+has_guilds_scope = 'guilds' in session.get('scope', '')
+```
 
-##### get_user_info(access_token)
+#### Улучшенная обработка ошибок
 
-Получает информацию о пользователе Discord, используя предоставленный токен доступа.
-
-Параметры:
-- `access_token` (str): Токен доступа Discord
-
-Возвращает:
-- `dict`: Информация о пользователе, включая id, username, avatar, email и т.д.
-
-##### login_required(func)
-
-Декоратор для защиты маршрутов, требующих аутентификации Discord.
-
-Параметры:
-- `func`: Функция маршрута для защиты
-
-Возвращает:
-- `function`: Функция-обертка, которая проверяет, аутентифицирован ли пользователь
-
-### Полный пример
-
-Полный пример использования можно найти в файле `app_example.py`, включенном в библиотеку.
+Декоратор `guilds_required` автоматически загружает информацию о серверах пользователя, если она отсутствует в сессии.
